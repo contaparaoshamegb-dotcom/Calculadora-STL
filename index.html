@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Calculadora 3D — Peso e Orçamento</title>
+<style>
+:root{--bg:#101114;--panel:#191b20;--line:#30333b;--text:#f4f4f5;--muted:#a8abb4;--accent:#d8b879;--bad:#ff7777;--good:#80d6a0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px Arial,Helvetica,sans-serif}
+header{padding:22px clamp(16px,4vw,42px);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:15px;align-items:center;flex-wrap:wrap}
+h1{font-size:clamp(21px,3vw,30px);margin:0}header p{color:var(--muted);margin:6px 0 0}.badge{border:1px solid var(--line);border-radius:99px;padding:8px 12px;color:var(--accent);font-size:12px}
+main{max-width:1400px;margin:auto;padding:22px clamp(12px,3vw,32px) 40px;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr);gap:20px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;min-width:0}.panel h2{font-size:17px;margin:0 0 14px}.muted{color:var(--muted);font-size:13px;line-height:1.5}
+.drop{border:1px dashed #666b77;border-radius:12px;padding:18px;text-align:center;background:#131519}.drop input{max-width:100%;margin:12px auto}.progress{height:8px;background:#30333b;border-radius:99px;overflow:hidden;margin:12px 0}.progress>div{height:100%;width:0;background:var(--accent);transition:width .12s}
+.status{min-height:20px;font-size:13px;margin-top:8px}.error{color:var(--bad)}.success{color:var(--good)}
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+button{border:1px solid var(--line);background:#24272e;color:var(--text);padding:10px 12px;border-radius:9px;cursor:pointer}button:hover{border-color:var(--accent)}button.primary{background:var(--accent);border-color:var(--accent);color:#171717;font-weight:bold}button:disabled{opacity:.45;cursor:not-allowed}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:12px}.stat{background:#131519;border:1px solid var(--line);border-radius:10px;padding:11px}.stat span{display:block;color:var(--muted);font-size:12px;margin-bottom:6px}.stat strong{font-size:15px;overflow-wrap:anywhere}
+label{display:block;color:var(--muted);font-size:12px;margin-bottom:6px}input[type=number],input[type=text]{width:100%;padding:10px;border:1px solid var(--line);background:#111318;color:var(--text);border-radius:8px}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:10px 6px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:normal}td input{min-width:80px}
+.materials{margin-top:12px}.material-name{font-weight:bold}.foot{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+/* Estilos do Rodapé e Modal de Prévia */
+footer{text-align:center;padding:20px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);background:var(--panel)}
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:1000;justify-content:center;align-items:center;padding:16px}
+.modal-content{background:var(--panel);border:1px solid var(--line);border-radius:16px;width:100%;max-width:750px;height:85vh;display:flex;flex-direction:column;padding:18px}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.modal-header h3{margin:0;font-size:17px}
+.modal-body{flex:1;width:100%;border-radius:8px;overflow-y:auto;border:1px solid var(--line);background:#fff;color:#111;padding:16px}
+.modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+@media(max-width:900px){main{grid-template-columns:1fr}}@media(max-width:500px){.stats{grid-template-columns:1fr}table{font-size:11px}th,td{padding:8px 3px}}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+</head>
+<body>
+<header><div><h1>Calculadora <span style="color:var(--accent)">3D</span></h1><p>Ficha técnica, estimativa de peso e orçamento de modelos STL</p></div><span class="badge">FERRAMENTA DE APOIO À PRODUÇÃO</span></header>
+<main>
+<section class="panel">
+<h2>1. Modelo 3D</h2>
+<div class="drop"><strong>Importe o arquivo STL da peça</strong><div class="muted">Unidades esperadas: milímetros (mm). O arquivo é processado localmente no navegador.</div><input id="file" type="file" accept=".stl,model/stl"></div>
+<div class="progress" aria-label="Progresso do carregamento"><div id="bar"></div></div><div id="status" class="status">Aguardando arquivo STL.</div>
+<div class="controls"><button id="reset" style="display:none;">Remover modelo</button></div>
+
+<!-- Vistas na página principal -->
+<div id="viewsPreview" style="display:none; margin-top:14px;">
+  <label style="margin-bottom:8px;">Vistas geradas do modelo</label>
+  <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:8px;">
+    <div style="text-align:center;"><div style="font-size:11px; color:var(--muted); margin-bottom:4px;">Superior</div><img id="prevTop" style="width:100%; border:1px solid var(--line); border-radius:8px; background:#111318;"></div>
+    <div style="text-align:center;"><div style="font-size:11px; color:var(--muted); margin-bottom:4px;">Frontal</div><img id="prevFront" style="width:100%; border:1px solid var(--line); border-radius:8px; background:#111318;"></div>
+    <div style="text-align:center;"><div style="font-size:11px; color:var(--muted); margin-bottom:4px;">Lateral</div><img id="prevSide" style="width:100%; border:1px solid var(--line); border-radius:8px; background:#111318;"></div>
+    <div style="text-align:center;"><div style="font-size:11px; color:var(--muted); margin-bottom:4px;">Isométrica</div><img id="prevIso" style="width:100%; border:1px solid var(--line); border-radius:8px; background:#111318;"></div>
+  </div>
+</div>
+
+<div class="stats">
+<div class="stat"><span>Volume calculado</span><strong id="volume">— cm³</strong></div>
+<div class="stat"><span>Dimensões (X × Y × Z)</span><strong id="dims">— mm</strong></div>
+<div class="stat"><span>Triângulos</span><strong id="tris">—</strong></div>
+</div>
+<p class="muted foot">Importante: o volume é calculado pela malha triangular fechada. Para malhas abertas, não-manifold, com faces invertidas ou unidades diferentes de mm, o resultado pode não representar o volume físico real. Confira o STL antes de usar em produção.</p>
+</section>
+<section class="panel">
+<h2>2. Metais e orçamento</h2>
+<p class="muted">Informe o preço atual por grama de cada material. O peso é estimado por volume × densidade; valores de liga e fundição podem variar.</p>
+<div class="materials"><table><thead><tr><th>Material</th><th>Densidade<br>g/cm³</th><th>Preço R$/g</th><th>Peso (g)</th><th>Valor (R$)</th></tr></thead><tbody id="metalRows"></tbody></table></div>
+<div class="controls"><button class="primary" id="pdf" disabled>Gerar Ficha Técnica / PDF</button></div>
+<p class="muted">O PDF é criado em A4 retrato, com uma única página, quatro vistas e tabela de materiais. A composição é compacta e inspirada em documentação técnica; não representa certificação ou conformidade formal garantida com todas as normas ABNT.</p>
+<div class="foot"><label for="clientName">Nome da empresa / cliente (opcional)</label><input id="clientName" type="text" placeholder="Ex.: Joalheria Exemplo"></div>
+<div class="foot"><label for="pieceRef">Referência da peça (opcional)</label><input id="pieceRef" type="text" placeholder="Ex.: REF-001"></div>
+<div class="foot"><label for="notes">Observações (opcional)</label><input id="notes" type="text" placeholder="Ex.: medidas de referência, acabamento..."></div>
+</section>
+</main>
+
+<footer>
+  Desenvolvido por Gabriel Nunes
+</footer>
+
+<!-- Modal de Prévia do PDF -->
+<div id="pdfModal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Prévia da Ficha Técnica (PDF)</h3>
+      <button id="closeModalBtn" style="padding:4px 10px;">✕</button>
+    </div>
+    <div id="pdfPreviewContainer" class="modal-body"></div>
+    <div class="modal-footer">
+      <button id="cancelModalBtn">Fechar / Voltar</button>
+      <button class="primary" id="downloadModalBtn">Baixar PDF</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+
+const $=id=>document.getElementById(id);
+const metalData=[
+ {name:'Ouro 18k amarelo',density:15.5,price:480.00},
+ {name:'Ouro 18k branco',density:14.8,price:480.00},
+ {name:'Ouro 18k rosé',density:15.0,price:480.00},
+ {name:'Prata 925',density:10.4,price:8.00},
+ {name:'Latão / metal bruto',density:8.4,price:0.50}
+];
+const rows=$('metalRows');
+metalData.forEach((m,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td class="material-name">${m.name}</td><td>${m.density.toFixed(1)}</td><td><input aria-label="Preço por grama ${m.name}" type="number" min="0" step="0.01" value="${m.price}" data-price="${i}"></td><td id="weight${i}">—</td><td id="cost${i}">—</td>`;rows.appendChild(tr)});
+let currentVolume=null,currentGeometry=null,currentMesh=null,currentName='',dimensions=null;
+let activePdfInstance=null,activePdfFilename='';
+let lastCapturedImages = {};
+
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x111318);
+const camera=new THREE.PerspectiveCamera(40,600/400,.01,100000);
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setSize(600, 400, false);
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+
+scene.add(new THREE.HemisphereLight(0xffffff,0x4b4b55,2));
+const key=new THREE.DirectionalLight(0xffffff,2.5);key.position.set(80,100,90);scene.add(key);
+const fill=new THREE.DirectionalLight(0xffffff,1.2);fill.position.set(-70,-30,-60);scene.add(fill);
+
+function setStatus(msg,type=''){ $('status').textContent=msg;$('status').className='status '+type}
+function clearModel(){
+  if(currentMesh){scene.remove(currentMesh);currentMesh.geometry.dispose();currentMesh.material.dispose()}
+  currentMesh=null;currentGeometry=null;currentVolume=null;dimensions=null;currentName='';
+  $('volume').textContent='— cm³';$('dims').textContent='— mm';$('tris').textContent='—';$('pdf').disabled=true;
+  $('reset').style.display='none';
+  $('viewsPreview').style.display='none';
+  lastCapturedImages = {};
+  updateMaterials();
+}
+function volumeFromGeometry(g){
+ const pos=g.getAttribute('position');let sum=0;
+ for(let i=0;i<pos.count;i+=3){const ax=pos.getX(i),ay=pos.getY(i),az=pos.getZ(i),bx=pos.getX(i+1),by=pos.getY(i+1),bz=pos.getZ(i+1),cx=pos.getX(i+2),cy=pos.getY(i+2),cz=pos.getZ(i+2);sum+=ax*(by*cz-bz*cy)+ay*(bz*cx-bx*cz)+az*(bx*cy-by*cx)}
+ return Math.abs(sum/6);
+}
+function updateMaterials(){
+  metalData.forEach((m,i)=>{
+    if(currentVolume!==null){
+      const weight=currentVolume*m.density;
+      const p=Number(document.querySelector(`[data-price="${i}"]`).value)||0;
+      $(`weight${i}`).textContent=weight.toFixed(3);
+      $(`cost${i}`).textContent=(weight*p).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    }else{
+      $(`weight${i}`).textContent='—';
+      $(`cost${i}`).textContent='—';
+    }
+  });
+}
+rows.addEventListener('input',e=>{if(e.target.matches('[data-price]'))updateMaterials()});
+
+function captureView(name){
+  if(!currentMesh) return '';
+  const box=new THREE.Box3().setFromObject(currentMesh);
+  const center=box.getCenter(new THREE.Vector3());
+  const size=box.getSize(new THREE.Vector3());
+  const max=Math.max(size.x,size.y,size.z,1);
+  
+  const dirs={
+    top:new THREE.Vector3(0,1,0),
+    front:new THREE.Vector3(0,0,1),
+    side:new THREE.Vector3(1,0,0),
+    iso:new THREE.Vector3(1,0.8,1)
+  };
+  
+  camera.position.copy(center).add(dirs[name].normalize().multiplyScalar(max*2.7));
+  camera.up.set(0,1,0);
+  if(name==='top') camera.up.set(0,0,-1);
+  camera.lookAt(center);
+  camera.updateProjectionMatrix();
+  
+  renderer.render(scene, camera);
+  const data = renderer.domElement.toDataURL('image/jpeg',.88);
+  lastCapturedImages[name] = data;
+  return data;
+}
+
+$('file').addEventListener('change',async e=>{
+ const file=e.target.files?.[0];if(!file)return;
+ $('bar').style.width='0%';clearModel();currentName=file.name;
+ if(!file.name.toLowerCase().endsWith('.stl')){setStatus('Falha: selecione um arquivo com extensão .STL.','error');return}
+ if(file.size===0){setStatus('Falha: o arquivo está vazio. Selecione outro STL.','error');return}
+ if(file.size>500*1024*1024){setStatus('Falha: arquivo acima de 500 MB. Reduza a malha e tente novamente.','error');return}
+ try{
+  setStatus('Lendo arquivo...');const buffer=await new Promise((resolve,reject)=>{const r=new FileReader();r.onprogress=ev=>{if(ev.lengthComputable){$('bar').style.width=Math.round(ev.loaded/ev.total*75)+'%';setStatus(`Lendo arquivo: ${Math.round(ev.loaded/ev.total*100)}%`)}};r.onerror=()=>reject(new Error('Não foi possível ler o arquivo.'));r.onabort=()=>reject(new Error('Leitura cancelada.'));r.onload=()=>resolve(r.result);r.readAsArrayBuffer(file)});
+  $('bar').style.width='80%';setStatus('Validando e processando malha...');
+  if(!(buffer instanceof ArrayBuffer)||buffer.byteLength<84)throw new Error('Arquivo muito pequeno ou cabeçalho STL inválido.');
+  const loader=new STLLoader();let geometry;
+  try{geometry=loader.parse(buffer)}catch(err){throw new Error('O conteúdo não pôde ser interpretado como STL válido.')}
+  if(!geometry?.getAttribute('position')||geometry.getAttribute('position').count<3)throw new Error('Nenhum triângulo válido foi encontrado no STL.');
+  const pos=geometry.getAttribute('position');for(let i=0;i<pos.count;i++){if(!Number.isFinite(pos.getX(i))||!Number.isFinite(pos.getY(i))||!Number.isFinite(pos.getZ(i)))throw new Error('A malha contém coordenadas inválidas.')}
+  geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();
+  const box=geometry.boundingBox,size=box.getSize(new THREE.Vector3());if(!Number.isFinite(size.x+size.y+size.z)||Math.max(size.x,size.y,size.z)===0)throw new Error('A geometria não possui dimensões válidas.');
+  const volumeMM3=volumeFromGeometry(geometry);if(!Number.isFinite(volumeMM3)||volumeMM3<=0)throw new Error('O volume calculado é zero ou inválido. Verifique se a malha é fechada e orientada corretamente.');
+  currentVolume=volumeMM3/1000;dimensions={x:size.x,y:size.y,z:size.z};
+  currentGeometry=geometry;currentMesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0xc5c8cf,metalness:.72,roughness:.28,side:THREE.DoubleSide}));
+  scene.add(currentMesh);
+  
+  // Gera e exibe as 4 vistas imediatamente na página principal
+  ['top', 'front', 'side', 'iso'].forEach(name => captureView(name));
+  $('prevTop').src = lastCapturedImages.top;
+  $('prevFront').src = lastCapturedImages.front;
+  $('prevSide').src = lastCapturedImages.side;
+  $('prevIso').src = lastCapturedImages.iso;
+  $('viewsPreview').style.display = 'block';
+
+  $('volume').textContent=currentVolume.toFixed(5)+' cm³';$('dims').textContent=`${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)}`;$('tris').textContent=Math.floor(pos.count/3).toLocaleString('pt-BR');
+  $('bar').style.width='100%';$('pdf').disabled=false;$('reset').style.display='inline-block';updateMaterials();setStatus('STL carregado e processado com sucesso.','success');
+ }catch(err){clearModel();$('bar').style.width='0%';setStatus('Falha na leitura: '+(err?.message||'arquivo inválido. Tente exportar novamente como STL.'),'error')}
+});
+
+$('reset').addEventListener('click',()=>{clearModel();$('file').value='';$('bar').style.width='0%';setStatus('Modelo removido. Aguardando arquivo STL.')});
+
+// Geração do PDF em A4 Retrato e Prévia Visual Direta
+$('pdf').addEventListener('click',()=>{
+ if(currentVolume===null||!currentMesh)return;
+ try{
+  const {jsPDF}=window.jspdf;const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
+  const W=210,H=297,margin=12;
+  
+  const clientVal = $('clientName').value.trim();
+  const refVal = $('pieceRef').value.trim();
+  
+  let headerTitle = 'Ficha Técnica';
+  let titleParts = [];
+  if(clientVal) titleParts.push(clientVal);
+  if(refVal) titleParts.push(refVal);
+  if(titleParts.length > 0){
+    headerTitle += ' — ' + titleParts.join(' — ');
+  }
+
+  pdf.setFont('helvetica','bold');pdf.setFontSize(13);pdf.text(headerTitle,margin,12);
+  pdf.setFont('helvetica','normal');pdf.setFontSize(8);
+  pdf.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, margin, 17);
+  pdf.setDrawColor(120);pdf.line(margin,21,W-margin,21);
+  
+  pdf.setFont('helvetica','bold');pdf.setFontSize(8.5);pdf.text('ESPECIFICAÇÕES GEOMÉTRICAS',margin,26);
+  pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);
+  pdf.text(`Volume calculado: ${currentVolume.toFixed(5)} cm³   |   Triângulos: ${Math.floor(currentGeometry.getAttribute('position').count/3).toLocaleString('pt-BR')}`,margin,31);
+  pdf.text(`Dimensões (X × Y × Z): ${dimensions.x.toFixed(2)} × ${dimensions.y.toFixed(2)} × ${dimensions.z.toFixed(2)} mm   |   Unidades: mm`,margin,36);
+  
+  pdf.setFont('helvetica','bold');pdf.setFontSize(8.5);pdf.text('VISTAS DO MODELO',margin,43);
+  const names=[['top','SUPERIOR'],['front','FRONTAL'],['side','LATERAL'],['iso','ISOMÉTRICA']];
+  const imgY=46,imgW=42,imgH=30,gap=3.5;
+  
+  names.forEach(([key,label],i)=>{
+   const x=margin+i*(imgW+gap);
+   pdf.setFont('helvetica','bold');pdf.setFontSize(7.5);
+   pdf.text(label,x,imgY);
+   const data = lastCapturedImages[key] || captureView(key);
+   pdf.addImage(data,'JPEG',x,imgY+2,imgW,imgH,'','FAST');
+   pdf.setDrawColor(180);pdf.rect(x,imgY+2,imgW,imgH);
+  });
+  
+  const tableY=85;
+  pdf.setFont('helvetica','bold');pdf.setFontSize(8.5);pdf.text('ESTIMATIVA DE PESO E ORÇAMENTO POR MATERIAL',margin,tableY);
+  const cols=[margin,margin+52,margin+82,margin+115,margin+150];
+  pdf.setFont('helvetica','bold');pdf.setFontSize(7.5);
+  pdf.text('Material',cols[0],tableY+6);
+  pdf.text('Densidade',cols[1],tableY+6);
+  pdf.text('Preço (R$/g)',cols[2],tableY+6);
+  pdf.text('Peso (g)',cols[3],tableY+6);
+  pdf.text('Valor (R$)',cols[4],tableY+6);
+  pdf.setDrawColor(100);pdf.line(margin,tableY+8,W-margin,tableY+8);
+  
+  pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);
+  metalData.forEach((m,i)=>{
+   const y=tableY+14+i*7.5;
+   const price=Number(document.querySelector(`[data-price="${i}"]`).value)||0;
+   const weight=currentVolume*m.density;
+   pdf.text(m.name,cols[0],y);
+   pdf.text(m.density.toFixed(1)+' g/cm³',cols[1],y);
+   pdf.text(price.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}),cols[2],y);
+   pdf.text(weight.toFixed(3)+' g',cols[3],y);
+   pdf.text((weight*price).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}),cols[4],y);
+   pdf.setDrawColor(220);pdf.line(margin,y+2.5,W-margin,y+2.5);
+  });
+  
+  const notesY=tableY+58;
+  pdf.setFont('helvetica','bold');pdf.setFontSize(7.5);pdf.text('Observações:',margin,notesY);
+  pdf.setFont('helvetica','normal');
+  const notesText = $('notes').value.trim()||'Pesos e custos são estimativas teóricas calculadas a partir do volume STL e das densidades informadas.';
+  pdf.text(pdf.splitTextToSize(notesText,W-2*margin-22).slice(0,2),margin+22,notesY);
+  
+  pdf.setFontSize(6.5);pdf.setTextColor(80);
+  pdf.text('Documento de referência para orçamento. Não inclui perdas de fundição, canais, suportes, acabamento ou ligas específicas.',margin,notesY+12);
+  pdf.text('Página 1/1',W-margin,notesY+16,{align:'right'});
+  
+  activePdfInstance = pdf;
+  activePdfFilename = ((clientVal || refVal || 'ficha-tecnica-joia').replace(/[^a-z0-9-_]+/gi,'_'))+'.pdf';
+  
+  let previewHtml = `
+    <div style="font-size:13px; font-weight:bold; color:#111; margin-bottom:4px;">${headerTitle}</div>
+    <div style="font-size:10px; color:#555; margin-bottom:8px;">
+      Data: ${new Date().toLocaleDateString('pt-BR')}
+    </div>
+    <hr style="border:0; border-top:1px solid #ccc; margin:8px 0;">
+    
+    <div style="font-size:11px; font-weight:bold; color:#222; margin-bottom:4px;">ESPECIFICAÇÕES GEOMÉTRICAS</div>
+    <div style="font-size:10px; color:#333; line-height:1.4; margin-bottom:10px;">
+      Volume calculado: <b>${currentVolume.toFixed(5)} cm³</b> &nbsp;|&nbsp; Triângulos: <b>${Math.floor(currentGeometry.getAttribute('position').count/3).toLocaleString('pt-BR')}</b><br>
+      Dimensões (X × Y × Z): <b>${dimensions.x.toFixed(2)} × ${dimensions.y.toFixed(2)} × ${dimensions.z.toFixed(2)} mm</b> &nbsp;|&nbsp; Unidades: mm
+    </div>
+
+    <div style="font-size:11px; font-weight:bold; color:#222; margin-bottom:6px;">VISTAS DO MODELO</div>
+    <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin-bottom:12px;">
+      <div style="text-align:center;"><div style="font-size:9px; font-weight:bold; margin-bottom:2px;">SUPERIOR</div><img src="${lastCapturedImages.top}" style="width:100%; border:1px solid #ccc; border-radius:4px;"></div>
+      <div style="text-align:center;"><div style="font-size:9px; font-weight:bold; margin-bottom:2px;">FRONTAL</div><img src="${lastCapturedImages.front}" style="width:100%; border:1px solid #ccc; border-radius:4px;"></div>
+      <div style="text-align:center;"><div style="font-size:9px; font-weight:bold; margin-bottom:2px;">LATERAL</div><img src="${lastCapturedImages.side}" style="width:100%; border:1px solid #ccc; border-radius:4px;"></div>
+      <div style="text-align:center;"><div style="font-size:9px; font-weight:bold; margin-bottom:2px;">ISOMÉTRICA</div><img src="${lastCapturedImages.iso}" style="width:100%; border:1px solid #ccc; border-radius:4px;"></div>
+    </div>
+
+    <div style="font-size:11px; font-weight:bold; color:#222; margin-bottom:6px;">ESTIMATIVA DE PESO E ORÇAMENTO POR MATERIAL</div>
+    <table style="width:100%; border-collapse:collapse; font-size:10px; margin-bottom:12px;">
+      <thead>
+        <tr style="border-bottom:1px solid #999; text-align:left;">
+          <th style="padding:4px;">Material</th>
+          <th style="padding:4px;">Densidade</th>
+          <th style="padding:4px;">Preço (R$/g)</th>
+          <th style="padding:4px;">Peso (g)</th>
+          <th style="padding:4px;">Valor (R$)</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  metalData.forEach((m, i)=>{
+    const price = Number(document.querySelector(`[data-price="${i}"]`).value)||0;
+    const weight = currentVolume * m.density;
+    const cost = weight * price;
+    previewHtml += `
+      <tr style="border-bottom:1px solid #e0e0e0;">
+        <td style="padding:4px; font-weight:bold;">${m.name}</td>
+        <td style="padding:4px;">${m.density.toFixed(1)} g/cm³</td>
+        <td style="padding:4px;">${price.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        <td style="padding:4px;">${weight.toFixed(3)} g</td>
+        <td style="padding:4px;">${cost.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      </tr>
+    `;
+  });
+
+  previewHtml += `
+      </tbody>
+    </table>
+
+    <div style="font-size:10px; margin-bottom:8px;">
+      <b>Observações:</b> ${notesText}
+    </div>
+    <div style="font-size:9px; color:#666; border-top:1px solid #ddd; padding-top:6px; display:flex; justify-content:space-between;">
+      <span>Documento de referência para orçamento. Não inclui perdas de fundição, canais, suportes, acabamento ou ligas específicas.</span>
+      <span>Página 1/1</span>
+    </div>
+  `;
+
+  $('pdfPreviewContainer').innerHTML = previewHtml;
+  $('pdfModal').style.display = 'flex';
+ }catch(err){setStatus('Não foi possível gerar a prévia: '+(err?.message||'erro inesperado.'),'error')}
+});
+
+// Controladores do Modal
+const closePdfModal = () => { $('pdfModal').style.display = 'none'; };
+$('closeModalBtn').addEventListener('click', closePdfModal);
+$('cancelModalBtn').addEventListener('click', closePdfModal);
+$('downloadModalBtn').addEventListener('click', () => {
+  if (activePdfInstance) {
+    activePdfInstance.save(activePdfFilename);
+    closePdfModal();
+  }
+});
+</script>
+</body></html>
