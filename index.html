@@ -22,6 +22,9 @@ input[type=file]{display:none}
 .file-upload-btn:hover{filter:brightness(1.1)}
 .file-name-display{display:block;margin-top:8px;font-size:12px;color:var(--muted);word-break:break-all}
 
+.batch-bar{display:none;background:#131519;border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:12px;gap:8px;align-items:center;flex-wrap:wrap}
+.batch-bar select{flex:1;min-width:180px;padding:8px 10px;border:1px solid var(--line);background:#111318;color:var(--text);border-radius:8px;font-size:13px}
+
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:12px}.stat{background:#131519;border:1px solid var(--line);border-radius:10px;padding:11px}.stat span{display:block;color:var(--muted);font-size:12px;margin-bottom:6px}.stat strong{font-size:15px;overflow-wrap:anywhere}
 label{display:block;color:var(--muted);font-size:12px;margin-bottom:6px}input[type=number],input[type=text]{width:100%;padding:10px;border:1px solid var(--line);background:#111318;color:var(--text);border-radius:8px}
 table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:10px 6px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:normal}td input{min-width:60px}
@@ -47,14 +50,22 @@ footer{text-align:center;padding:20px;color:var(--muted);font-size:13px;border-t
 <section class="panel">
 <h2>1. Modelo 3D</h2>
 <div class="drop">
-  <strong>Importe o arquivo STL da peça</strong>
-  <div class="muted" style="margin-bottom: 12px;">Unidades esperadas: milímetros (mm). O arquivo é processado localmente no navegador.</div>
-  <label for="file" class="file-upload-btn">Selecionar Arquivo STL</label>
-  <input id="file" type="file" accept=".stl,model/stl">
+  <strong>Importe o(s) arquivo(s) STL da(s) peça(s)</strong>
+  <div class="muted" style="margin-bottom: 12px;">Unidades esperadas: milímetros (mm). Selecione um ou vários arquivos STL para configurar e gerar a ficha individual de cada peça.</div>
+  <label for="file" class="file-upload-btn">Selecionar Arquivo(s) STL</label>
+  <input id="file" type="file" accept=".stl,model/stl" multiple>
   <span id="fileNameDisplay" class="file-name-display">Nenhum arquivo escolhido</span>
 </div>
 <div class="progress" aria-label="Progresso do carregamento"><div id="bar"></div></div><div id="status" class="status">Aguardando arquivo STL.</div>
-<div class="controls"><button id="reset" style="display:none;">Remover modelo</button></div>
+<div class="controls"><button id="reset" style="display:none;">Remover modelo(s)</button></div>
+
+<!-- Seletor de peças quando houver múltiplos arquivos -->
+<div id="batchBar" class="batch-bar">
+  <span style="font-size:12px; color:var(--accent); font-weight:bold;" id="batchCount">Arquivos: 0 peças</span>
+  <button type="button" id="prevModelBtn" style="padding:6px 10px;" title="Peça anterior">◀</button>
+  <select id="modelSelect" aria-label="Selecionar modelo carregado"></select>
+  <button type="button" id="nextModelBtn" style="padding:6px 10px;" title="Próxima peça">▶</button>
+</div>
 
 <!-- Vistas na página principal -->
 <div id="viewsPreview" style="display:none; margin-top:14px;">
@@ -77,11 +88,11 @@ footer{text-align:center;padding:20px;color:var(--muted);font-size:13px;border-t
 
 <section class="panel">
 <h2>2. Metais, Pedras e Orçamento</h2>
-<p class="muted">Informe o preço atual por grama dos metais e configure as pedras por formato, quantidade e tamanho.</p>
+<p class="muted">Informe o preço atual por grama dos materiais e configure as pedras por formato, quantidade e tamanho.</p>
 
 <div class="materials">
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-    <label style="font-weight:bold; color:var(--text); margin-bottom:0;">Metais</label>
+    <label style="font-weight:bold; color:var(--text); margin-bottom:0;">Metais e Resina</label>
     <button id="updateMetalPrices" style="padding:4px 10px; font-size:12px;" title="Atualizar cotações dos metais">🔄 Atualizar Cotações</button>
   </div>
   <table>
@@ -109,8 +120,10 @@ footer{text-align:center;padding:20px;color:var(--muted);font-size:13px;border-t
   </div>
 </div>
 
-<div class="controls" style="margin-top:16px;"><button class="primary" id="pdf" disabled>Gerar Ficha Técnica / PDF</button></div>
-<p class="muted">O PDF é criado em A4 retrato, com uma única página, vistas, tabelas de materiais e de pedras.</p>
+<div class="controls" style="margin-top:16px;">
+  <button class="primary" id="pdf" disabled>Gerar Ficha Técnica / PDF</button>
+</div>
+<p class="muted">O PDF é criado em A4 retrato, com uma única página para a peça selecionada, vistas, tabelas de materiais e de pedras.</p>
 <div class="foot"><label for="clientName">Nome da empresa / cliente (opcional)</label><input id="clientName" type="text" placeholder="Ex.: Joalheria Exemplo"></div>
 <div class="foot"><label for="pieceRef">Referência da peça (opcional)</label><input id="pieceRef" type="text" placeholder="Ex.: REF-001"></div>
 <div class="foot"><label for="notes">Observações (opcional)</label><input id="notes" type="text" placeholder="Ex.: medidas de referência, acabamento..."></div>
@@ -151,10 +164,12 @@ const metalData=[
  {name:'Prata 925',density:10.4,price:8.54},
  {name:'Prata 800',density:10.2,price:7.38},
  {name:'Prata 700',density:10.0,price:6.42},
- {name:'Latão / metal bruto',density:8.4,price:0.08}
+ {name:'Latão / metal bruto',density:8.4,price:0.08},
+ {name:'Resina (calcinável)',density:1.1,price:1.35}
 ];
 
-let stoneData = [];
+let modelsList = [];
+let activeModelIndex = -1;
 let watermarkDataUrl = null;
 let watermarkAspect = 1;
 
@@ -179,7 +194,11 @@ $('watermarkFile').addEventListener('change', e => {
 });
 
 const rows=$('metalRows');
-metalData.forEach((m,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td class="material-name">${m.name}</td><td>${m.density.toFixed(1)}</td><td><input aria-label="Preço por grama ${m.name}" type="number" min="0" step="0.01" value="${m.price}" data-price="${i}"></td><td id="weight${i}">—</td><td id="cost${i}">—</td>`;rows.appendChild(tr)});
+metalData.forEach((m,i)=>{
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td class="material-name">${m.name}</td><td>${m.density.toFixed(1)}</td><td><input aria-label="Preço por grama ${m.name}" type="number" min="0" step="0.01" value="${m.price}" data-price="${i}"></td><td id="weight${i}">—</td><td id="cost${i}">—</td>`;
+  rows.appendChild(tr);
+});
 
 $('updateMetalPrices').addEventListener('click', async () => {
   const btn = $('updateMetalPrices');
@@ -204,10 +223,21 @@ $('updateMetalPrices').addEventListener('click', async () => {
   }
 });
 
+function getActiveModel(){
+  return activeModelIndex >= 0 && activeModelIndex < modelsList.length ? modelsList[activeModelIndex] : null;
+}
+
+function getActiveStones(){
+  const m = getActiveModel();
+  if(!m) return [];
+  return m.stones;
+}
+
 function renderStones(){
   const sRows = $('stoneRows');
   sRows.innerHTML = '';
-  stoneData.forEach((st, i)=>{
+  const stones = getActiveStones();
+  stones.forEach((st, i)=>{
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><input type="text" value="${st.shape}" data-stone-shape="${i}" placeholder="Ex: Redondo, Oval..."></td>
@@ -221,33 +251,47 @@ function renderStones(){
 }
 
 $('addStone').addEventListener('click', ()=>{
-  stoneData.push({shape: '', qty: 1, size: ''});
+  const m = getActiveModel();
+  if(!m) return;
+  m.stones.push({shape: '', qty: 1, size: ''});
   renderStones();
 });
 
 $('stoneRows').addEventListener('click', e=>{
   if(e.target.matches('[data-stone-del]')){
+    const m = getActiveModel();
+    if(!m) return;
     const idx = Number(e.target.getAttribute('data-stone-del'));
-    stoneData.splice(idx, 1);
+    m.stones.splice(idx, 1);
     renderStones();
   }
 });
 
 $('stoneRows').addEventListener('input', e=>{
+  const m = getActiveModel();
+  if(!m) return;
   const target = e.target;
   const idx = target.getAttribute('data-stone-shape') ?? target.getAttribute('data-stone-qty') ?? target.getAttribute('data-stone-size');
   if(idx !== null){
     const i = Number(idx);
-    stoneData[i].shape = document.querySelector(`[data-stone-shape="${i}"]`).value;
-    stoneData[i].qty = Number(document.querySelector(`[data-stone-qty="${i}"]`).value) || 0;
-    stoneData[i].size = document.querySelector(`[data-stone-size="${i}"]`).value;
+    m.stones[i].shape = document.querySelector(`[data-stone-shape="${i}"]`).value;
+    m.stones[i].qty = Number(document.querySelector(`[data-stone-qty="${i}"]`).value) || 0;
+    m.stones[i].size = document.querySelector(`[data-stone-size="${i}"]`).value;
     updateMaterials();
   }
 });
 
-let currentVolume=null,currentGeometry=null,currentMesh=null,currentName='',dimensions=null;
+$('pieceRef').addEventListener('input', () => {
+  const m = getActiveModel();
+  if(m) m.pieceRef = $('pieceRef').value;
+});
+
+$('notes').addEventListener('input', () => {
+  const m = getActiveModel();
+  if(m) m.notes = $('notes').value;
+});
+
 let activePdfInstance=null,activePdfFilename='';
-let lastCapturedImages = {};
 
 const scene=new THREE.Scene();scene.background=new THREE.Color(0xffffff);
 const camera=new THREE.PerspectiveCamera(40,600/400,.01,100000);
@@ -260,30 +304,41 @@ const key=new THREE.DirectionalLight(0xffffff,2.5);key.position.set(80,100,90);s
 const fill=new THREE.DirectionalLight(0xffffff,1.2);fill.position.set(-70,-30,-60);scene.add(fill);
 
 function setStatus(msg,type=''){ $('status').textContent=msg;$('status').className='status '+type}
+
 function clearModel(){
-  if(currentMesh){scene.remove(currentMesh);currentMesh.geometry.dispose();currentMesh.material.dispose()}
-  currentMesh=null;currentGeometry=null;currentVolume=null;dimensions=null;currentName='';
-  $('volume').textContent='— cm³';$('dims').textContent='— mm';$('tris').textContent='—';$('pdf').disabled=true;
+  modelsList = [];
+  activeModelIndex = -1;
+  $('volume').textContent='— cm³';
+  $('dims').textContent='— mm';
+  $('tris').textContent='—';
+  $('pdf').disabled=true;
   $('reset').style.display='none';
+  $('batchBar').style.display='none';
+  $('modelSelect').innerHTML='';
   $('viewsPreview').style.display='none';
   $('fileNameDisplay').textContent='Nenhum arquivo escolhido';
-  lastCapturedImages = {};
+  $('pieceRef').value='';
+  $('notes').value='';
+  renderStones();
   updateMaterials();
 }
+
 function volumeFromGeometry(g){
  const pos=g.getAttribute('position');let sum=0;
  for(let i=0;i<pos.count;i+=3){const ax=pos.getX(i),ay=pos.getY(i),az=pos.getZ(i),bx=pos.getX(i+1),by=pos.getY(i+1),bz=pos.getZ(i+1),cx=pos.getX(i+2),cy=pos.getY(i+2),cz=pos.getZ(i+2);sum+=ax*(by*cz-bz*cy)+ay*(bz*cx-bx*cz)+az*(bx*cy-by*cx)}
  return Math.abs(sum/6);
 }
+
 function updateMaterials(){
+  const mObj = getActiveModel();
+  const vol = mObj ? mObj.volume : null;
   metalData.forEach((m,i)=>{
-    if(currentVolume!==null){
-      const weight=currentVolume*m.density;
+    if(vol!==null){
+      const weight=vol*m.density;
       const p=Number(document.querySelector(`[data-price="${i}"]`).value)||0;
       $(`weight${i}`).textContent=weight.toFixed(3);
       const metalCost = weight*p;
       $(`cost${i}`).textContent=(metalCost).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-      
       if(i === 0){
         $('grandTotal').textContent = 'R$ ' + metalCost.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
       }
@@ -296,293 +351,406 @@ function updateMaterials(){
 }
 rows.addEventListener('input',e=>{if(e.target.matches('[data-price]'))updateMaterials()});
 
-function captureView(name){
-  if(!currentMesh) return '';
-  const box=new THREE.Box3().setFromObject(currentMesh);
+function renderMeshViews(mesh){
+  scene.add(mesh);
+  const box=new THREE.Box3().setFromObject(mesh);
   const center=box.getCenter(new THREE.Vector3());
   const size=box.getSize(new THREE.Vector3());
   const max=Math.max(size.x,size.y,size.z,1);
-  
+
   const dirs={
     top:new THREE.Vector3(0,0,1),
     front:new THREE.Vector3(0,1,0),
     side:new THREE.Vector3(1,0,0),
     iso:new THREE.Vector3(1,1,1)
   };
-  
-  camera.position.copy(center).add(dirs[name].normalize().multiplyScalar(max*2.7));
-  if(name === 'top') {
-    camera.up.set(0, 1, 0);
-  } else {
-    camera.up.set(0, 0, 1);
-  }
 
-  camera.lookAt(center);
-  camera.updateProjectionMatrix();
-  
-  renderer.render(scene, camera);
-  const data = renderer.domElement.toDataURL('image/jpeg',.88);
-  lastCapturedImages[name] = data;
-  return data;
+  const images = {};
+  Object.keys(dirs).forEach(name => {
+    camera.position.copy(center).add(dirs[name].clone().normalize().multiplyScalar(max*2.7));
+    if(name === 'top') {
+      camera.up.set(0, 1, 0);
+    } else {
+      camera.up.set(0, 0, 1);
+    }
+    camera.lookAt(center);
+    camera.updateProjectionMatrix();
+    renderer.render(scene, camera);
+    images[name] = renderer.domElement.toDataURL('image/jpeg',.88);
+  });
+
+  scene.remove(mesh);
+  return images;
 }
 
-$('file').addEventListener('change',async e=>{
- const file=e.target.files?.[0];if(!file)return;
- $('fileNameDisplay').textContent=file.name;
- $('bar').style.width='0%';clearModel();currentName=file.name;
- $('fileNameDisplay').textContent=file.name;
- if(!file.name.toLowerCase().endsWith('.stl')){setStatus('Falha: selecione um arquivo com extensão .STL.','error');return}
- if(file.size===0){setStatus('Falha: o arquivo está vazio. Selecione outro STL.','error');return}
- if(file.size>500*1024*1024){setStatus('Falha: arquivo acima de 500 MB. Reduza a malha e tente novamente.','error');return}
- try{
-  setStatus('Lendo arquivo...');const buffer=await new Promise((resolve,reject)=>{const r=new FileReader();r.onprogress=ev=>{if(ev.lengthComputable){$('bar').style.width=Math.round(ev.loaded/ev.total*75)+'%';setStatus(`Lendo arquivo: ${Math.round(ev.loaded/ev.total*100)}%`)}};r.onerror=()=>reject(new Error('Não foi possível ler o arquivo.'));r.onabort=()=>reject(new Error('Leitura cancelada.'));r.onload=()=>resolve(r.result);r.readAsArrayBuffer(file)});
-  $('bar').style.width='80%';setStatus('Validando e processando malha...');
-  if(!(buffer instanceof ArrayBuffer)||buffer.byteLength<84)throw new Error('Arquivo muito pequeno ou cabeçalho STL inválido.');
-  const loader=new STLLoader();let geometry;
-  try{geometry=loader.parse(buffer)}catch(err){throw new Error('O conteúdo não pôde ser interpretado como STL válido.')}
-  if(!geometry?.getAttribute('position')||geometry.getAttribute('position').count<3)throw new Error('Nenhum triângulo válido foi encontrado no STL.');
-  const pos=geometry.getAttribute('position');for(let i=0;i<pos.count;i++){if(!Number.isFinite(pos.getX(i))||!Number.isFinite(pos.getY(i))||!Number.isFinite(pos.getZ(i)))throw new Error('A malha contém coordenadas inválidas.')}
-  geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();
-  const box=geometry.boundingBox,size=box.getSize(new THREE.Vector3());if(!Number.isFinite(size.x+size.y+size.z)||Math.max(size.x,size.y,size.z)===0)throw new Error('A geometria não possui dimensões válidas.');
-  const volumeMM3=volumeFromGeometry(geometry);if(!Number.isFinite(volumeMM3)||volumeMM3<=0)throw new Error('O volume calculado é zero ou inválido. Verifique se a malha é fechada e orientada corretamente.');
-  currentVolume=volumeMM3/1000;dimensions={x:size.x,y:size.y,z:size.z};
-  currentGeometry=geometry;currentMesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0x666870,metalness:.72,roughness:.28,side:THREE.DoubleSide}));
-  scene.add(currentMesh);
-  
-  ['top', 'front', 'side', 'iso'].forEach(name => captureView(name));
-  $('prevTop').src = lastCapturedImages.top;
-  $('prevFront').src = lastCapturedImages.front;
-  $('prevSide').src = lastCapturedImages.side;
-  $('prevIso').src = lastCapturedImages.iso;
+function selectModel(idx){
+  if(idx < 0 || idx >= modelsList.length) return;
+  activeModelIndex = idx;
+  const m = modelsList[idx];
+
+  $('modelSelect').value = String(idx);
+  $('prevTop').src = m.images.top;
+  $('prevFront').src = m.images.front;
+  $('prevSide').src = m.images.side;
+  $('prevIso').src = m.images.iso;
   $('viewsPreview').style.display = 'block';
 
-  $('volume').textContent=currentVolume.toFixed(5)+' cm³';$('dims').textContent=`${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)}`;$('tris').textContent=Math.floor(pos.count/3).toLocaleString('pt-BR');
-  $('bar').style.width='100%';$('pdf').disabled=false;$('reset').style.display='inline-block';updateMaterials();setStatus('STL carregado e processado com sucesso.','success');
- }catch(err){clearModel();$('bar').style.width='0%';setStatus('Falha na leitura: '+(err?.message||'arquivo inválido. Tente exportar novamente como STL.'),'error')}
+  $('volume').textContent = m.volume.toFixed(5) + ' cm³';
+  $('dims').textContent = `${m.dimensions.x.toFixed(2)} × ${m.dimensions.y.toFixed(2)} × ${m.dimensions.z.toFixed(2)}`;
+  $('tris').textContent = m.tris.toLocaleString('pt-BR');
+  $('pieceRef').value = m.pieceRef;
+  $('notes').value = m.notes;
+
+  renderStones();
+  updateMaterials();
+}
+
+$('modelSelect').addEventListener('change', e => selectModel(Number(e.target.value)));
+$('prevModelBtn').addEventListener('click', () => {
+  if(modelsList.length < 2) return;
+  selectModel((activeModelIndex - 1 + modelsList.length) % modelsList.length);
+});
+$('nextModelBtn').addEventListener('click', () => {
+  if(modelsList.length < 2) return;
+  selectModel((activeModelIndex + 1) % modelsList.length);
 });
 
-$('reset').addEventListener('click',()=>{clearModel();$('file').value='';$('bar').style.width='0%';setStatus('Modelo removido. Aguardando arquivo STL.')});
+async function processSingleSTL(file){
+  if(!file.name.toLowerCase().endsWith('.stl')) throw new Error(`${file.name}: extensão deve ser .STL.`);
+  if(file.size===0) throw new Error(`${file.name}: arquivo vazio.`);
+  if(file.size>500*1024*1024) throw new Error(`${file.name}: arquivo acima de 500 MB.`);
 
-// Geração do PDF em A4 Retrato e Prévia Visual Direta
-$('pdf').addEventListener('click',()=>{
- if(currentVolume===null||!currentMesh)return;
- try{
-  const {jsPDF}=window.jspdf;const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
-  const W=210,H=297,margin=12;
+  const buffer = await new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onerror = () => reject(new Error(`Não foi possível ler ${file.name}.`));
+    r.onabort = () => reject(new Error('Leitura cancelada.'));
+    r.onload = () => resolve(r.result);
+    r.readAsArrayBuffer(file);
+  });
 
-  if(watermarkDataUrl){
-    try {
-      pdf.setGState(new pdf.GState({opacity: 0.12}));
-      const baseWidth = 110;
-      const calcHeight = baseWidth / watermarkAspect;
-      const posX = (W - baseWidth) / 2;
-      const posY = (H - calcHeight) / 2;
-      pdf.addImage(watermarkDataUrl, 'JPEG', posX, posY, baseWidth, calcHeight, '', 'FAST');
-      pdf.setGState(new pdf.GState({opacity: 1.0}));
-    } catch(errWatermark) {
-      console.error("Erro ao aplicar marca d'água:", errWatermark);
+  if(!(buffer instanceof ArrayBuffer) || buffer.byteLength < 84) throw new Error(`${file.name}: cabeçalho STL inválido.`);
+  const loader = new STLLoader();
+  let geometry;
+  try{ geometry = loader.parse(buffer); } catch(err){ throw new Error(`${file.name}: não pôde ser interpretado como STL válido.`); }
+  if(!geometry?.getAttribute('position') || geometry.getAttribute('position').count < 3) throw new Error(`${file.name}: nenhum triângulo válido encontrado.`);
+
+  const pos = geometry.getAttribute('position');
+  for(let i=0;i<pos.count;i++){
+    if(!Number.isFinite(pos.getX(i)) || !Number.isFinite(pos.getY(i)) || !Number.isFinite(pos.getZ(i))){
+      throw new Error(`${file.name}: contém coordenadas inválidas.`);
     }
   }
-  
-  const clientVal = $('clientName').value.trim();
-  const refVal = $('pieceRef').value.trim();
-  
-  let headerTitle = 'Ficha Técnica';
-  let titleParts = [];
-  if(clientVal) titleParts.push(clientVal);
-  if(refVal) titleParts.push(refVal);
-  if(titleParts.length > 0){
-    headerTitle += ' — ' + titleParts.join(' — ');
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+
+  const box = geometry.boundingBox;
+  const size = box.getSize(new THREE.Vector3());
+  if(!Number.isFinite(size.x+size.y+size.z) || Math.max(size.x,size.y,size.z)===0) throw new Error(`${file.name}: sem dimensões válidas.`);
+
+  const volumeMM3 = volumeFromGeometry(geometry);
+  if(!Number.isFinite(volumeMM3) || volumeMM3<=0) throw new Error(`${file.name}: volume zero ou malha aberta.`);
+
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({color:0x666870,metalness:.72,roughness:.28,side:THREE.DoubleSide}));
+  const images = renderMeshViews(mesh);
+  geometry.dispose();
+  mesh.material.dispose();
+
+  const baseRef = file.name.replace(/\.stl$/i, '');
+
+  return {
+    name: file.name,
+    pieceRef: baseRef,
+    notes: '',
+    volume: volumeMM3 / 1000,
+    dimensions: {x: size.x, y: size.y, z: size.z},
+    tris: Math.floor(pos.count / 3),
+    images,
+    stones: []
+  };
+}
+
+$('file').addEventListener('change', async e => {
+  const files = Array.from(e.target.files || []);
+  if(!files.length) return;
+
+  $('bar').style.width = '0%';
+  clearModel();
+  $('fileNameDisplay').textContent = files.length === 1 ? files[0].name : `${files.length} arquivos selecionados`;
+
+  const loaded = [];
+  const errors = [];
+
+  for(let i = 0; i < files.length; i++){
+    const f = files[i];
+    setStatus(`Processando (${i + 1}/${files.length}): ${f.name}...`);
+    $('bar').style.width = Math.round(((i + 0.5) / files.length) * 100) + '%';
+    try {
+      const item = await processSingleSTL(f);
+      loaded.push(item);
+    } catch(err) {
+      errors.push(err?.message || `Erro em ${f.name}`);
+    }
   }
 
-  pdf.setFont('helvetica','bold');pdf.setFontSize(13);pdf.text(headerTitle,margin,12);
-  pdf.setFont('helvetica','normal');pdf.setFontSize(8);
-  pdf.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, margin, 17);
-  pdf.setDrawColor(120);pdf.line(margin,21,W-margin,21);
-  
-  pdf.setFont('helvetica','bold');pdf.setFontSize(8.5);pdf.text('ESPECIFICAÇÕES GEOMÉTRICAS',margin,26);
-  pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);
-  pdf.text(`Volume calculado: ${currentVolume.toFixed(5)} cm³   |   Triângulos: ${Math.floor(currentGeometry.getAttribute('position').count/3).toLocaleString('pt-BR')}`,margin,31);
-  pdf.text(`Dimensões (X × Y × Z): ${dimensions.x.toFixed(2)} × ${dimensions.y.toFixed(2)} × ${dimensions.z.toFixed(2)} mm   |   Unidades: mm`,margin,36);
-  
-  pdf.setFont('helvetica','bold');pdf.setFontSize(8.5);pdf.text('VISTAS DO MODELO',margin,43);
-  const names=[['top','SUPERIOR'],['front','FRONTAL'],['side','LATERAL'],['iso','ISOMÉTRICA']];
-  const imgY=46,imgW=42,imgH=30,gap=3.5;
-  
-  names.forEach(([key,label],i)=>{
-   const x=margin+i*(imgW+gap);
-   pdf.setFont('helvetica','bold');pdf.setFontSize(7.5);
-   pdf.text(label,x,imgY);
-   const data = lastCapturedImages[key] || captureView(key);
-   pdf.addImage(data,'JPEG',x,imgY+2,imgW,imgH,'','FAST');
-   pdf.setDrawColor(180);pdf.rect(x,imgY+2,imgW,imgH);
-  });
-  
-  // Tabela de Metais
-  let currentY = 83;
-  pdf.setFont('helvetica','bold');pdf.setFontSize(8.5);pdf.text('ESTIMATIVA DE PESO E ORÇAMENTO — METAIS',margin,currentY);
-  const cols=[margin,margin+52,margin+82,margin+115,margin+150];
-  pdf.setFont('helvetica','bold');pdf.setFontSize(7.5);
-  pdf.text('Material',cols[0],currentY+5);
-  pdf.text('Densidade',cols[1],currentY+5);
-  pdf.text('Preço (R$/g)',cols[2],currentY+5);
-  pdf.text('Peso (g)',cols[3],currentY+5);
-  pdf.text('Valor (R$)',cols[4],currentY+5);
-  pdf.setDrawColor(100);pdf.line(margin,currentY+7,W-margin,currentY+7);
-  
-  pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);
-  metalData.forEach((m,i)=>{
-   const y=currentY+12+i*6.5;
-   const price=Number(document.querySelector(`[data-price="${i}"]`).value)||0;
-   const weight=currentVolume*m.density;
-   pdf.text(m.name,cols[0],y);
-   pdf.text(m.density.toFixed(1)+' g/cm³',cols[1],y);
-   pdf.text(price.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}),cols[2],y);
-   pdf.text(weight.toFixed(3)+' g',cols[3],y);
-   pdf.text((weight*price).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}),cols[4],y);
-   pdf.setDrawColor(220);pdf.line(margin,y+2,W-margin,y+2);
+  if(loaded.length === 0){
+    $('bar').style.width = '0%';
+    setStatus('Falha na leitura: ' + (errors[0] || 'nenhum STL válido.'), 'error');
+    return;
+  }
+
+  modelsList = loaded;
+  const selectEl = $('modelSelect');
+  selectEl.innerHTML = '';
+  modelsList.forEach((m, idx) => {
+    const opt = document.createElement('option');
+    opt.value = String(idx);
+    opt.textContent = `${idx + 1}. ${m.name} (${m.volume.toFixed(3)} cm³)`;
+    selectEl.appendChild(opt);
   });
 
-  // Tabela de Pedras
-  currentY = currentY + 14 + metalData.length * 6.5 + 4;
-  pdf.setFont('helvetica','bold');pdf.setFontSize(8.5);pdf.text('RELAÇÃO DE PEDRAS / GEMAS',margin,currentY);
-  const stoneCols=[margin,margin+80,margin+130];
-  pdf.setFont('helvetica','bold');pdf.setFontSize(7.5);
-  pdf.text('Formato / Tipo',stoneCols[0],currentY+5);
-  pdf.text('Quantidade',stoneCols[1],currentY+5);
-  pdf.text('Tamanho',stoneCols[2],currentY+5);
-  pdf.setDrawColor(100);pdf.line(margin,currentY+7,W-margin,currentY+7);
+  if(modelsList.length > 1){
+    $('batchBar').style.display = 'flex';
+    $('batchCount').textContent = `Arquivos: ${modelsList.length} peças`;
+  }
 
-  pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);
-  if(stoneData.length === 0){
-    pdf.text('Nenhuma pedra informada.', stoneCols[0], currentY+13);
-    currentY += 8;
+  $('bar').style.width = '100%';
+  $('pdf').disabled = false;
+  $('reset').style.display = 'inline-block';
+  selectModel(0);
+
+  if(errors.length > 0){
+    setStatus(`${loaded.length} carregado(s), ${errors.length} falha(s): ${errors[0]}`, 'error');
+  } else if(loaded.length === 1){
+    setStatus('STL carregado e processado com sucesso.', 'success');
   } else {
-    stoneData.forEach((st, i)=>{
-     const y=currentY+12+i*6.5;
-     pdf.text(st.shape || '—',stoneCols[0],y);
-     pdf.text(String(st.qty || 0),stoneCols[1],y);
-     pdf.text(st.size || '—',stoneCols[2],y);
-     pdf.setDrawColor(220);pdf.line(margin,y+2,W-margin,y+2);
+    setStatus(`${loaded.length} arquivos STL carregados. Selecione cada peça acima para gerar sua ficha individual.`, 'success');
+  }
+});
+
+$('reset').addEventListener('click',()=>{clearModel();$('file').value='';$('bar').style.width='0%';setStatus('Modelo(s) removido(s). Aguardando arquivo STL.')});
+
+// Geração do PDF Individual e Prévia Visual Direta
+$('pdf').addEventListener('click',()=>{
+  const m = getActiveModel();
+  if(!m) return;
+  try{
+    const {jsPDF} = window.jspdf;
+    const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
+    const W=210,H=297,margin=12;
+
+    if(watermarkDataUrl){
+      try {
+        pdf.setGState(new pdf.GState({opacity: 0.12}));
+        const baseWidth = 110;
+        const calcHeight = baseWidth / watermarkAspect;
+        const posX = (W - baseWidth) / 2;
+        const posY = (H - calcHeight) / 2;
+        pdf.addImage(watermarkDataUrl, 'JPEG', posX, posY, baseWidth, calcHeight, '', 'FAST');
+        pdf.setGState(new pdf.GState({opacity: 1.0}));
+      } catch(errWatermark) {
+        console.error("Erro ao aplicar marca d'água:", errWatermark);
+      }
+    }
+
+    const clientVal = $('clientName').value.trim();
+    const refVal = (m.pieceRef || '').trim() || m.name.replace(/\.stl$/i, '');
+
+    let headerTitle = 'Ficha Técnica';
+    let titleParts = [];
+    if(clientVal) titleParts.push(clientVal);
+    if(refVal) titleParts.push(refVal);
+    if(titleParts.length > 0){
+      headerTitle += ' — ' + titleParts.join(' — ');
+    }
+
+    pdf.setFont('helvetica','bold');pdf.setFontSize(13);pdf.text(headerTitle,margin,12);
+    pdf.setFont('helvetica','normal');pdf.setFontSize(8);
+    pdf.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, margin, 17);
+    pdf.setDrawColor(120);pdf.line(margin,21,W-margin,21);
+
+    pdf.setFont('helvetica','bold');pdf.setFontSize(8.5);pdf.text('ESPECIFICAÇÕES GEOMÉTRICAS',margin,26);
+    pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);
+    pdf.text(`Volume calculado: ${m.volume.toFixed(5)} cm³   |   Triângulos: ${m.tris.toLocaleString('pt-BR')}`,margin,31);
+    pdf.text(`Dimensões (X × Y × Z): ${m.dimensions.x.toFixed(2)} × ${m.dimensions.y.toFixed(2)} × ${m.dimensions.z.toFixed(2)} mm   |   Unidades: mm`,margin,36);
+
+    pdf.setFont('helvetica','bold');pdf.setFontSize(8.5);pdf.text('VISTAS DO MODELO',margin,43);
+    const names=[['top','SUPERIOR'],['front','FRONTAL'],['side','LATERAL'],['iso','ISOMÉTRICA']];
+    const imgY=46,imgW=42,imgH=30,gap=3.5;
+
+    names.forEach(([key,label],i)=>{
+      const x=margin+i*(imgW+gap);
+      pdf.setFont('helvetica','bold');pdf.setFontSize(7.5);
+      pdf.text(label,x,imgY);
+      pdf.addImage(m.images[key],'JPEG',x,imgY+2,imgW,imgH,'','FAST');
+      pdf.setDrawColor(180);pdf.rect(x,imgY+2,imgW,imgH);
     });
-    currentY += 6 + stoneData.length * 6.5;
-  }
-  
-  const notesY = currentY + 8;
-  pdf.setFont('helvetica','bold');pdf.setFontSize(7.5);pdf.text('Observações:',margin,notesY);
-  pdf.setFont('helvetica','normal');
-  const notesText = $('notes').value.trim()||'Pesos e custos são estimativas teóricas calculadas a partir do volume STL e das densidades informadas.';
-  pdf.text(pdf.splitTextToSize(notesText,W-2*margin-22).slice(0,2),margin+22,notesY);
-  
-  pdf.setFontSize(6.5);pdf.setTextColor(80);
-  pdf.text('Documento de referência para orçamento. Não inclui perdas de fundição, canais, suportes, acabamento ou ligas específicas.',margin,notesY+12);
-  pdf.text('Página 1/1',W-margin,notesY+16,{align:'right'});
-  
-  activePdfInstance = pdf;
-  activePdfFilename = ((clientVal || refVal || 'ficha-tecnica-joia').replace(/[^a-z0-9-_]+/gi,'_'))+'.pdf';
-  
-  // HTML da Prévia do Modal
-  let previewHtml = `
-    <div style="position:relative; min-height:100%;">
-      ${watermarkDataUrl ? `<div style="position:absolute; top:30%; left:15%; width:70%; opacity:0.1; z-index:0; pointer-events:none; display:flex; justify-content:center;"><img src="${watermarkDataUrl}" style="width:100%; height:auto; object-fit:contain;"></div>` : ''}
-      <div style="position:relative; z-index:1;">
-        <div style="font-size:13px; font-weight:bold; color:#111; margin-bottom:4px;">${headerTitle}</div>
-        <div style="font-size:10px; color:#555; margin-bottom:8px;">
-          Data: ${new Date().toLocaleDateString('pt-BR')}
-        </div>
-        <hr style="border:0; border-top:1px solid #ccc; margin:8px 0;">
-        
-        <div style="font-size:11px; font-weight:bold; color:#222; margin-bottom:4px;">ESPECIFICAÇÕES GEOMÉTRICAS</div>
-        <div style="font-size:10px; color:#333; line-height:1.4; margin-bottom:10px;">
-          Volume calculado: <b>${currentVolume.toFixed(5)} cm³</b> &nbsp;|&nbsp; Triângulos: <b>${Math.floor(currentGeometry.getAttribute('position').count/3).toLocaleString('pt-BR')}</b><br>
-          Dimensões (X × Y × Z): <b>${dimensions.x.toFixed(2)} × ${dimensions.y.toFixed(2)} × ${dimensions.z.toFixed(2)} mm</b> &nbsp;|&nbsp; Unidades: mm
-        </div>
 
-        <div style="font-size:11px; font-weight:bold; color:#222; margin-bottom:6px;">VISTAS DO MODELO</div>
-        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin-bottom:12px;">
-          <div style="text-align:center;"><div style="font-size:9px; font-weight:bold; margin-bottom:2px;">SUPERIOR</div><img src="${lastCapturedImages.top}" style="width:100%; border:1px solid #ccc; border-radius:4px;"></div>
-          <div style="text-align:center;"><div style="font-size:9px; font-weight:bold; margin-bottom:2px;">FRONTAL</div><img src="${lastCapturedImages.front}" style="width:100%; border:1px solid #ccc; border-radius:4px;"></div>
-          <div style="text-align:center;"><div style="font-size:9px; font-weight:bold; margin-bottom:2px;">LATERAL</div><img src="${lastCapturedImages.side}" style="width:100%; border:1px solid #ccc; border-radius:4px;"></div>
-          <div style="text-align:center;"><div style="font-size:9px; font-weight:bold; margin-bottom:2px;">ISOMÉTRICA</div><img src="${lastCapturedImages.iso}" style="width:100%; border:1px solid #ccc; border-radius:4px;"></div>
-        </div>
+    // Tabela de Metais e Resina
+    let currentY = 83;
+    pdf.setFont('helvetica','bold');pdf.setFontSize(8.5);pdf.text('ESTIMATIVA DE PESO E ORÇAMENTO — METAIS E RESINA',margin,currentY);
+    const cols=[margin,margin+52,margin+82,margin+115,margin+150];
+    pdf.setFont('helvetica','bold');pdf.setFontSize(7.5);
+    pdf.text('Material',cols[0],currentY+5);
+    pdf.text('Densidade',cols[1],currentY+5);
+    pdf.text('Preço (R$/g)',cols[2],currentY+5);
+    pdf.text('Peso (g)',cols[3],currentY+5);
+    pdf.text('Valor (R$)',cols[4],currentY+5);
+    pdf.setDrawColor(100);pdf.line(margin,currentY+7,W-margin,currentY+7);
 
-        <div style="font-size:11px; font-weight:bold; color:#222; margin-bottom:6px;">ESTIMATIVA DE PESO E ORÇAMENTO — METAIS</div>
-        <table style="width:100%; border-collapse:collapse; font-size:10px; margin-bottom:10px;">
-          <thead>
-            <tr style="border-bottom:1px solid #999; text-align:left;">
-              <th style="padding:4px;">Material</th>
-              <th style="padding:4px;">Densidade</th>
-              <th style="padding:4px;">Preço (R$/g)</th>
-              <th style="padding:4px;">Peso (g)</th>
-              <th style="padding:4px;">Valor (R$)</th>
-            </tr>
-          </thead>
-          <tbody>
-  `;
+    pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);
+    metalData.forEach((mat,i)=>{
+      const y=currentY+12+i*6.5;
+      const price=Number(document.querySelector(`[data-price="${i}"]`).value)||0;
+      const weight=m.volume*mat.density;
+      pdf.text(mat.name,cols[0],y);
+      pdf.text(mat.density.toFixed(1)+' g/cm³',cols[1],y);
+      pdf.text(price.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}),cols[2],y);
+      pdf.text(weight.toFixed(3)+' g',cols[3],y);
+      pdf.text((weight*price).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}),cols[4],y);
+      pdf.setDrawColor(220);pdf.line(margin,y+2,W-margin,y+2);
+    });
 
-  metalData.forEach((m, i)=>{
-    const price = Number(document.querySelector(`[data-price="${i}"]`).value)||0;
-    const weight = currentVolume * m.density;
-    const cost = weight * price;
-    previewHtml += `
-      <tr style="border-bottom:1px solid #e0e0e0;">
-        <td style="padding:4px; font-weight:bold;">${m.name}</td>
-        <td style="padding:4px;">${m.density.toFixed(1)} g/cm³</td>
-        <td style="padding:4px;">${price.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-        <td style="padding:4px;">${weight.toFixed(3)} g</td>
-        <td style="padding:4px;">${cost.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-      </tr>
+    // Tabela de Pedras
+    currentY = currentY + 14 + metalData.length * 6.5 + 4;
+    pdf.setFont('helvetica','bold');pdf.setFontSize(8.5);pdf.text('RELAÇÃO DE PEDRAS / GEMAS',margin,currentY);
+    const stoneCols=[margin,margin+80,margin+130];
+    pdf.setFont('helvetica','bold');pdf.setFontSize(7.5);
+    pdf.text('Formato / Tipo',stoneCols[0],currentY+5);
+    pdf.text('Quantidade',stoneCols[1],currentY+5);
+    pdf.text('Tamanho',stoneCols[2],currentY+5);
+    pdf.setDrawColor(100);pdf.line(margin,currentY+7,W-margin,currentY+7);
+
+    pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);
+    if(m.stones.length === 0){
+      pdf.text('Nenhuma pedra informada.', stoneCols[0], currentY+13);
+      currentY += 8;
+    } else {
+      m.stones.forEach((st, i)=>{
+        const y=currentY+12+i*6.5;
+        pdf.text(st.shape || '—',stoneCols[0],y);
+        pdf.text(String(st.qty || 0),stoneCols[1],y);
+        pdf.text(st.size || '—',stoneCols[2],y);
+        pdf.setDrawColor(220);pdf.line(margin,y+2,W-margin,y+2);
+      });
+      currentY += 6 + m.stones.length * 6.5;
+    }
+
+    const notesY = currentY + 8;
+    pdf.setFont('helvetica','bold');pdf.setFontSize(7.5);pdf.text('Observações:',margin,notesY);
+    pdf.setFont('helvetica','normal');
+    const notesText = (m.notes || '').trim() || 'Pesos e custos são estimativas teóricas calculadas a partir do volume STL e das densidades informadas.';
+    pdf.text(pdf.splitTextToSize(notesText,W-2*margin-22).slice(0,2),margin+22,notesY);
+
+    pdf.setFontSize(6.5);pdf.setTextColor(80);
+    pdf.text('Documento de referência para orçamento. Não inclui perdas de fundição, canais, suportes, acabamento ou ligas específicas.',margin,notesY+12);
+    pdf.text('Página 1/1',W-margin,notesY+16,{align:'right'});
+
+    const safeBase = ((clientVal ? clientVal + '_' : '') + refVal).replace(/[^a-z0-9-_]+/gi,'_').replace(/^_+|_+$/g,'') || 'ficha-tecnica-joia';
+    activePdfInstance = pdf;
+    activePdfFilename = safeBase + '.pdf';
+
+    let previewHtml = `
+      <div style="position:relative; min-height:100%;">
+        ${watermarkDataUrl ? `<div style="position:absolute; top:30%; left:15%; width:70%; opacity:0.1; z-index:0; pointer-events:none; display:flex; justify-content:center;"><img src="${watermarkDataUrl}" style="width:100%; height:auto; object-fit:contain;"></div>` : ''}
+        <div style="position:relative; z-index:1;">
+          <div style="font-size:13px; font-weight:bold; color:#111; margin-bottom:4px;">${headerTitle}</div>
+          <div style="font-size:10px; color:#555; margin-bottom:8px;">
+            Data: ${new Date().toLocaleDateString('pt-BR')}
+          </div>
+          <hr style="border:0; border-top:1px solid #ccc; margin:8px 0;">
+          
+          <div style="font-size:11px; font-weight:bold; color:#222; margin-bottom:4px;">ESPECIFICAÇÕES GEOMÉTRICAS</div>
+          <div style="font-size:10px; color:#333; line-height:1.4; margin-bottom:10px;">
+            Volume calculado: <b>${m.volume.toFixed(5)} cm³</b> &nbsp;|&nbsp; Triângulos: <b>${m.tris.toLocaleString('pt-BR')}</b><br>
+            Dimensões (X × Y × Z): <b>${m.dimensions.x.toFixed(2)} × ${m.dimensions.y.toFixed(2)} × ${m.dimensions.z.toFixed(2)} mm</b> &nbsp;|&nbsp; Unidades: mm
+          </div>
+
+          <div style="font-size:11px; font-weight:bold; color:#222; margin-bottom:6px;">VISTAS DO MODELO</div>
+          <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin-bottom:12px;">
+            <div style="text-align:center;"><div style="font-size:9px; font-weight:bold; margin-bottom:2px;">SUPERIOR</div><img src="${m.images.top}" style="width:100%; border:1px solid #ccc; border-radius:4px;"></div>
+            <div style="text-align:center;"><div style="font-size:9px; font-weight:bold; margin-bottom:2px;">FRONTAL</div><img src="${m.images.front}" style="width:100%; border:1px solid #ccc; border-radius:4px;"></div>
+            <div style="text-align:center;"><div style="font-size:9px; font-weight:bold; margin-bottom:2px;">LATERAL</div><img src="${m.images.side}" style="width:100%; border:1px solid #ccc; border-radius:4px;"></div>
+            <div style="text-align:center;"><div style="font-size:9px; font-weight:bold; margin-bottom:2px;">ISOMÉTRICA</div><img src="${m.images.iso}" style="width:100%; border:1px solid #ccc; border-radius:4px;"></div>
+          </div>
+
+          <div style="font-size:11px; font-weight:bold; color:#222; margin-bottom:6px;">ESTIMATIVA DE PESO E ORÇAMENTO — METAIS E RESINA</div>
+          <table style="width:100%; border-collapse:collapse; font-size:10px; margin-bottom:10px;">
+            <thead>
+              <tr style="border-bottom:1px solid #999; text-align:left;">
+                <th style="padding:4px;">Material</th>
+                <th style="padding:4px;">Densidade</th>
+                <th style="padding:4px;">Preço (R$/g)</th>
+                <th style="padding:4px;">Peso (g)</th>
+                <th style="padding:4px;">Valor (R$)</th>
+              </tr>
+            </thead>
+            <tbody>
     `;
-  });
 
-  previewHtml += `
-          </tbody>
-        </table>
-
-        <div style="font-size:11px; font-weight:bold; color:#222; margin-bottom:6px;">RELAÇÃO DE PEDRAS / GEMAS</div>
-        <table style="width:100%; border-collapse:collapse; font-size:10px; margin-bottom:12px;">
-          <thead>
-            <tr style="border-bottom:1px solid #999; text-align:left;">
-              <th style="padding:4px;">Formato / Tipo</th>
-              <th style="padding:4px;">Quantidade</th>
-              <th style="padding:4px;">Tamanho</th>
-            </tr>
-          </thead>
-          <tbody>
-  `;
-
-  if(stoneData.length === 0){
-    previewHtml += `<tr><td colspan="3" style="padding:6px; color:#666;">Nenhuma pedra informada.</td></tr>`;
-  } else {
-    stoneData.forEach(st => {
+    metalData.forEach((mat, i)=>{
+      const price = Number(document.querySelector(`[data-price="${i}"]`).value)||0;
+      const weight = m.volume * mat.density;
+      const cost = weight * price;
       previewHtml += `
         <tr style="border-bottom:1px solid #e0e0e0;">
-          <td style="padding:4px; font-weight:bold;">${st.shape || '—'}</td>
-          <td style="padding:4px;">${st.qty || 0}</td>
-          <td style="padding:4px;">${st.size || '—'}</td>
+          <td style="padding:4px; font-weight:bold;">${mat.name}</td>
+          <td style="padding:4px;">${mat.density.toFixed(1)} g/cm³</td>
+          <td style="padding:4px;">${price.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="padding:4px;">${weight.toFixed(3)} g</td>
+          <td style="padding:4px;">${cost.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
         </tr>
       `;
     });
-  }
 
-  previewHtml += `
-          </tbody>
-        </table>
+    previewHtml += `
+            </tbody>
+          </table>
 
-        <div style="font-size:10px; margin-bottom:8px;">
-          <b>Observações:</b> ${notesText}
-        </div>
-        <div style="font-size:9px; color:#666; border-top:1px solid #ddd; padding-top:6px; display:flex; justify-content:space-between;">
-          <span>Documento de referência para orçamento. Não inclui perdas de fundição, canais, suportes, acabamento ou ligas específicas.</span>
-          <span>Página 1/1</span>
+          <div style="font-size:11px; font-weight:bold; color:#222; margin-bottom:6px;">RELAÇÃO DE PEDRAS / GEMAS</div>
+          <table style="width:100%; border-collapse:collapse; font-size:10px; margin-bottom:12px;">
+            <thead>
+              <tr style="border-bottom:1px solid #999; text-align:left;">
+                <th style="padding:4px;">Formato / Tipo</th>
+                <th style="padding:4px;">Quantidade</th>
+                <th style="padding:4px;">Tamanho</th>
+              </tr>
+            </thead>
+            <tbody>
+    `;
+
+    if(m.stones.length === 0){
+      previewHtml += `<tr><td colspan="3" style="padding:6px; color:#666;">Nenhuma pedra informada.</td></tr>`;
+    } else {
+      m.stones.forEach(st => {
+        previewHtml += `
+          <tr style="border-bottom:1px solid #e0e0e0;">
+            <td style="padding:4px; font-weight:bold;">${st.shape || '—'}</td>
+            <td style="padding:4px;">${st.qty || 0}</td>
+            <td style="padding:4px;">${st.size || '—'}</td>
+          </tr>
+        `;
+      });
+    }
+
+    previewHtml += `
+            </tbody>
+          </table>
+
+          <div style="font-size:10px; margin-bottom:8px;">
+            <b>Observações:</b> ${notesText}
+          </div>
+          <div style="font-size:9px; color:#666; border-top:1px solid #ddd; padding-top:6px; display:flex; justify-content:space-between;">
+            <span>Documento de referência para orçamento. Não inclui perdas de fundição, canais, suportes, acabamento ou ligas específicas.</span>
+            <span>Página 1/1</span>
+          </div>
         </div>
       </div>
-    </div>
-  `;
+    `;
 
-  $('pdfPreviewContainer').innerHTML = previewHtml;
-  $('pdfModal').style.display = 'flex';
- }catch(err){setStatus('Não foi possível gerar a prévia: '+(err?.message||'erro inesperado.'),'error')}
+    $('pdfPreviewContainer').innerHTML = previewHtml;
+    $('pdfModal').style.display = 'flex';
+  }catch(err){setStatus('Não foi possível gerar a prévia: '+(err?.message||'erro inesperado.'),'error')}
 });
 
 renderStones();
